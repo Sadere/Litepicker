@@ -5,6 +5,10 @@ export class Calendar {
   protected options: any = {
     element: null,
     elementEnd: null,
+    inputStart: null,
+    inputEnd: null,
+    labelStart: null,
+    labelEnd: null,
     parentEl: null,
     firstDay: 1,
     format: 'YYYY-MM-DD',
@@ -74,9 +78,20 @@ export class Calendar {
   protected picker: HTMLElement;
   protected datePicked: DateTime[] = [];
 
+  protected dragItem = null;
+  protected active = false;
+  protected currentX;
+  protected initialX;
+  protected xOffset = 0;
+
+  protected firstVisibleMonthIdx;
+  protected monthsMoved;
+  protected blockDrag = false;
+  protected movedCurrent = 0;
+
   protected render() {
     const months = document.createElement('div');
-    months.className = style.containerMonths;
+    months.className = 'statistics__actions-calendar';
 
     if (style[`columns${this.options.numberOfColumns}`]) {
       months.classList.remove(style.columns2, style.columns3, style.columns4);
@@ -91,9 +106,18 @@ export class Calendar {
       months.classList.add(style.showWeekNumbers);
     }
 
+    const offset = this.options.numberOfMonths - 1;
+    const animationOffset = 6;
+
     const startDate = this.calendars[0].clone();
-    const startMonthIdx = startDate.getMonth();
-    const totalMonths = startDate.getMonth() + this.options.numberOfMonths;
+
+    if(this.dragItem === null) {
+      this.firstVisibleMonthIdx = startDate.getMonth();
+    }
+
+    const startMonthIdx = this.firstVisibleMonthIdx - animationOffset;
+    const totalMonths = this.firstVisibleMonthIdx + this.options.numberOfMonths + animationOffset;
+
 
     let calendarIdx = 0;
     // tslint:disable-next-line: prefer-for-of
@@ -112,8 +136,17 @@ export class Calendar {
       calendarIdx += 1;
     }
 
+    months.style.transform = 'translateX(-' + (219 * animationOffset) + 'px)';
+
+    const dragPanel = document.createElement('div');
+    dragPanel.classList.add('statistics__actions-drag-panel');
+
+
+    this.dragItem = dragPanel;
+
     this.picker.innerHTML = '';
     this.picker.appendChild(months);
+    this.picker.appendChild(dragPanel);
 
     if (!this.options.autoApply || this.options.footerHTML) {
       this.picker.appendChild(this.renderFooter());
@@ -130,10 +163,10 @@ export class Calendar {
     const totalDays = 32 - new Date(startDate.getFullYear(), startDate.getMonth(), 32).getDate();
 
     const month = document.createElement('div');
-    month.className = style.monthItem;
+    month.className = 'statistics__actions-calendar__block';
 
     const monthHeader = document.createElement('div');
-    monthHeader.className = style.monthItemHeader;
+    monthHeader.className = 'statistics__actions-calendar__month';
 
     const monthAndYear = document.createElement('div');
 
@@ -161,7 +194,7 @@ export class Calendar {
         let idx = 0;
 
         if (this.options.splitView) {
-          const monthItem = target.closest(`.${style.monthItem}`);
+          const monthItem = target.closest(`.statistics__actions-calendar__block`);
           idx = [...monthItem.parentNode.childNodes].findIndex(el => el === monthItem);
         }
 
@@ -177,7 +210,7 @@ export class Calendar {
     } else {
       const monthName = document.createElement('strong');
       monthName.className = style.monthItemName;
-      monthName.innerHTML = date.toLocaleString(this.options.lang, { month: 'long' });
+      monthName.innerHTML = date.toLocaleString(this.options.lang, { month: 'long' }) + " ";
       monthAndYear.appendChild(monthName);
     }
 
@@ -219,7 +252,7 @@ export class Calendar {
         let idx = 0;
 
         if (this.options.splitView) {
-          const monthItem = target.closest(`.${style.monthItem}`);
+          const monthItem = target.closest(`.statistics__actions-calendar__block`);
           idx = [...monthItem.parentNode.childNodes].findIndex(el => el === monthItem);
         }
 
@@ -239,19 +272,7 @@ export class Calendar {
       monthAndYear.appendChild(monthYear);
     }
 
-    const previousMonthButton = document.createElement('a');
-    previousMonthButton.href = '#';
-    previousMonthButton.className = style.buttonPreviousMonth;
-    previousMonthButton.innerHTML = this.options.buttonText.previousMonth;
-
-    const nextMonthButton = document.createElement('a');
-    nextMonthButton.href = '#';
-    nextMonthButton.className = style.buttonNextMonth;
-    nextMonthButton.innerHTML = this.options.buttonText.nextMonth;
-
-    monthHeader.appendChild(previousMonthButton);
     monthHeader.appendChild(monthAndYear);
-    monthHeader.appendChild(nextMonthButton);
 
     if (this.options.minDate
       && startDate.isSameOrBefore(new DateTime(this.options.minDate), 'month')) {
@@ -263,24 +284,24 @@ export class Calendar {
       month.classList.add(style.noNextMonth);
     }
 
-    const weekdaysRow = document.createElement('div');
-    weekdaysRow.className = style.monthItemWeekdaysRow;
+    const weekdaysRow = document.createElement('ul');
+    weekdaysRow.className = 'statistics__actions-calendar__week';
 
-    if (this.options.showWeekNumbers) {
-      weekdaysRow.innerHTML = '<div>W</div>';
-    }
+    // if (this.options.showWeekNumbers) {
+    //   weekdaysRow.innerHTML = '<div>W</div>';
+    // }
 
     for (let w = 1; w <= 7; w += 1) {
       // 7 days, 4 is «Thursday» (new Date(1970, 0, 1, 12, 0, 0, 0))
       const dayIdx = 7 - 4 + this.options.firstDay + w;
-      const weekday = document.createElement('div');
+      const weekday = document.createElement('li');
       weekday.innerHTML = this.weekdayName(dayIdx);
       weekday.title = this.weekdayName(dayIdx, 'long');
       weekdaysRow.appendChild(weekday);
     }
 
-    const days = document.createElement('div');
-    days.className = style.containerDays;
+    const days = document.createElement('ul');
+    days.className = 'statistics__actions-calendar__wrapper';
 
     const skipDays = this.calcSkipDays(startDate);
 
@@ -289,7 +310,7 @@ export class Calendar {
     }
 
     for (let idx = 0; idx < skipDays; idx += 1) {
-      const dummy = document.createElement('div');
+      const dummy = document.createElement('li');
       days.appendChild(dummy);
     }
 
@@ -304,19 +325,28 @@ export class Calendar {
       days.appendChild(this.renderDay(startDate));
     }
 
-    month.appendChild(monthHeader);
+    // dummies in the end for consistent height
+    for (let idx = 0; idx < 5; idx += 1) {
+      const dummy = document.createElement('li');
+      days.appendChild(dummy);
+    }
+
     month.appendChild(weekdaysRow);
+    month.appendChild(monthHeader);
     month.appendChild(days);
 
     return month;
   }
 
   protected renderDay(date: DateTime) {
-    const day = document.createElement('a');
-    day.href = '#';
+    const day = document.createElement('li');
     day.className = style.dayItem;
     day.innerHTML = String(date.getDate());
     day.dataset.time = String(date.getTime());
+
+    if (date.getDay() === 6 || date.getDay() === 0) {
+      day.classList.add('weekend');
+    }
 
     if (date.toDateString() === (new Date()).toDateString()) {
       day.classList.add(style.isToday);
@@ -338,7 +368,7 @@ export class Calendar {
 
       if (this.datePicked.length === 2) {
         if (date.isBetween(this.datePicked[0], this.datePicked[1])) {
-          day.classList.add(style.isInRange);
+          day.classList.add('selected');
         }
       }
     } else if (this.options.startDate) {
@@ -356,16 +386,16 @@ export class Calendar {
 
       if (this.options.startDate && this.options.endDate) {
         if (date.isBetween(this.options.startDate, this.options.endDate)) {
-          day.classList.add(style.isInRange);
+          day.classList.add('selected');
         }
       }
     }
 
-    if (this.options.minDate && date.isBefore(new DateTime(this.options.minDate))) {
+    if (this.options.minDate && date.isBefore(new DateTime(this.options.minDate, this.options.format))) {
       day.classList.add(style.isLocked);
     }
 
-    if (this.options.maxDate && date.isAfter(new DateTime(this.options.maxDate))) {
+    if (this.options.maxDate && date.isAfter(new DateTime(this.options.maxDate, this.options.format))) {
       day.classList.add(style.isLocked);
     }
 
@@ -534,5 +564,69 @@ export class Calendar {
     if (total < 0) total += 7;
 
     return total;
+  }
+
+
+  protected dragStart(e) {
+    if (e.type === "touchstart") {
+      this.initialX = e.touches[0].clientX - this.xOffset;
+    } else {
+      this.initialX = e.clientX - this.xOffset;
+    }
+
+    if (!this.blockDrag && e.target === this.dragItem) {
+      this.active = true;
+    }
+  }
+
+  protected dragEnd(e) {
+    if(this.blockDrag || !this.active) return;
+
+    this.initialX = this.currentX;
+    this.active = false;
+    this.firstVisibleMonthIdx -= this.monthsMoved;
+
+    const el = <HTMLElement>this.picker.childNodes[0];
+    el.classList.add('is-moving');
+    this.moveElement(el, 219 * this.monthsMoved);
+    this.blockDrag = true;
+
+    this.xOffset = 0;
+
+    setTimeout(() => {
+      el.classList.remove('is-moving');
+      this.blockDrag = false;
+
+      this.render();
+    }, 200);
+
+
+    this.monthsMoved = 0;
+  }
+
+  protected drag(e) {
+    if (this.active) {
+    
+      e.preventDefault();
+    
+      if (e.type === "touchmove") {
+        this.currentX = e.touches[0].clientX - this.initialX;
+      } else {
+        this.currentX = e.clientX - this.initialX;
+      }
+
+      this.xOffset = this.currentX;
+
+      this.monthsMoved = Math.round(this.currentX / 219);
+
+      const el = <HTMLElement>this.picker.childNodes[0];
+
+      this.moveElement(el, this.currentX);
+    }
+  }
+
+  protected moveElement(el, translate) {
+    this.movedCurrent = translate;
+    el.style.transform = 'translateX(' + (-1314 + translate) + 'px)';
   }
 }

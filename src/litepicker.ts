@@ -114,6 +114,23 @@ export class Litepicker extends Calendar {
     if (this.options.elementEnd instanceof HTMLElement) {
       this.options.elementEnd.addEventListener('change', e => this.onInput(e), true);
     }
+    // Input change
+    if (this.options.inputStart && this.options.inputStart instanceof HTMLElement) {
+      this.options.inputStart.addEventListener('change', e => this.onInput(e), true);
+    }
+    if (this.options.inputEnd && this.options.inputEnd instanceof HTMLElement) {
+      this.options.inputEnd.addEventListener('change', e => this.onInput(e), true);
+    }
+
+    // Drag animations
+    this.picker.addEventListener("touchstart", e => this.dragStart(e), false);
+    this.picker.addEventListener("touchend", e => this.dragEnd(e), false);
+    this.picker.addEventListener("touchmove", e => this.drag(e), false);
+
+    this.picker.addEventListener("mousedown", e => this.dragStart(e), false);
+    this.picker.addEventListener("mouseup", e => this.dragEnd(e), false);
+    this.picker.addEventListener("mouseleave", e => this.dragEnd(e), false);
+    this.picker.addEventListener("mousemove", e => this.drag(e), false);
 
     this.render();
 
@@ -175,7 +192,17 @@ export class Litepicker extends Calendar {
   }
 
   private parseInput() {
-    if (this.options.elementEnd) {
+    if (
+      this.options.inputStart
+      && this.options.inputStart.value.length
+      && this.options.inputEnd
+      && this.options.inputEnd.value.length
+    ) {
+      return [
+        new DateTime(this.options.inputStart.value, this.options.format),
+        new DateTime(this.options.inputEnd.value, this.options.format),
+      ];
+    } else if (this.options.elementEnd) {
       if (this.options.element instanceof HTMLInputElement
         && this.options.element.value.length
         && this.options.elementEnd instanceof HTMLInputElement
@@ -206,11 +233,54 @@ export class Litepicker extends Calendar {
   }
 
   private updateInput() {
-    if (!(this.options.element instanceof HTMLInputElement)) return;
+    if (
+      !(this.options.element instanceof HTMLInputElement)
+      && !this.options.inputStart
+      && !this.options.inputEnd
+    )
+      return;
 
+    // Labels
+    if (!this.options.singleMode) {
+      if (
+        this.options.labelStart
+        && this.options.startDate
+      ) {
+        const startValue = this.options.startDate
+          .format(this.options.format, this.options.lang);
+        this.options.labelStart.textContent = startValue;
+      }
+
+      if (
+        this.options.labelEnd
+        && this.options.endDate
+      ) {
+        const endValue = this.options.endDate
+          .format(this.options.format, this.options.lang);
+        this.options.labelEnd.textContent = endValue;
+      }
+    }
+
+    // Inputs
     if (this.options.singleMode && this.options.startDate) {
       this.options.element.value = this.options.startDate
         .format(this.options.format, this.options.lang);
+    } else if (
+      !this.options.singleMode 
+      && this.options.inputStart 
+      && this.options.inputEnd
+      && this.options.startDate
+      && this.options.endDate
+    ) {
+      const startValue = this.options.startDate
+        .format(this.options.format, this.options.lang);
+      const endValue = this.options.endDate
+        .format(this.options.format, this.options.lang);
+
+      
+      this.options.inputStart.value = startValue;
+      this.options.inputEnd.value = endValue;
+      
     } else if (!this.options.singleMode && this.options.startDate && this.options.endDate) {
       const startValue = this.options.startDate
         .format(this.options.format, this.options.lang);

@@ -31,7 +31,7 @@ declare module './litepicker' {
 Litepicker.prototype.show = function (el = null) {
   if (this.options.inlineMode) {
     this.picker.style.position = 'static';
-    this.picker.style.display = 'inline-block';
+    this.picker.style.display = 'block';
     this.picker.style.top = null;
     this.picker.style.left = null;
     this.picker.style.bottom = null;
